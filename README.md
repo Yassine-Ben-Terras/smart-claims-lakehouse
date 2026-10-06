@@ -4,9 +4,6 @@ An insurance-claims analytics project on **Azure Databricks with ADLS Gen2 stora
 
 Data comes from three kinds of source system (Azure SQL / SQL Server, Azure Event Hubs and ADLS Gen2), is ingested into Bronze tables, cleaned into Silver, aggregated into Gold, and consumed through an AI/BI dashboard. An image-classification model and a rule engine score claims for investigation.
 
-![Architecture (Azure)](docs/architecture_azure.svg)
-
-`docs/ProjectViz.gif` is the original generic architecture animation (it shows the AWS icons).
 
 ## Architecture
 
@@ -106,14 +103,3 @@ The SQL Server gateway pipeline runs continuously and must be started once befor
 2. In the workspace go to **Workspace → Create → Git folder**.
 3. Paste the GitHub repository URL, choose the provider, and click **Create Git folder**.
 4. Link a GitHub credential under **Settings → Linked accounts** if prompted.
-
-## Known issues in the source code (left unchanged)
-
-The Kinesis notebooks were replaced by `eventhubs_parsed.py`, which also removes the old `"earlierst"` typo and the broken `kinesis_simple.py` draft. Remaining issues:
-
-
-- `autoloader_cleansource.py`: a stray `'` in the `cloudFiles.schemaLocation` path.
-- Missing `import dlt` in `ingest_training_imgs.py`, `metadata_imgs_schema.py`, `01_bronze_to_silver.py` and `02_silver_to_gold.py`.
-- `02_silver_to_gold.py`: `geocode()` returns random coordinates (demo shortcut, the real geopy call is unreachable).
-- Catalog and schema names are hardcoded as `smart_claims_dev` / `0x_*` throughout the notebooks.
-- `ML_Notebook.ipynb`: the MLflow experiment path contains a personal user email.
