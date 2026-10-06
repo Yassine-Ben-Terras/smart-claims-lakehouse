@@ -1,0 +1,29 @@
+# Databricks
+.databricks/
+.bundle/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Secrets / local config
+.env
+.env.*
+
+# Data files
+data/
+*.csv
+*.tsv
+*.parquet
+*.avro
+*.orc
+*.xlsx
+*.delta
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
