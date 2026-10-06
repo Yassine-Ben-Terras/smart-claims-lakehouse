@@ -1,0 +1,93 @@
+# Lakeflow Declarative Pipelines - one per ingestion source, then silver and gold.
+# Bronze tables are written by the ingestion pipelines/notebooks below.
+# Default schema matters: some bronze tables are declared with unqualified names
+# (telematics, claim_images_meta) and land in the pipeline's default schema.
+resources:
+  pipelines:
+
+    # ---- INGESTION: relational database -> Lakeflow Connect (SQL Server CDC) ----
+    # Source setup (CDC / change tracking) is documented in src/ingestion/lakeflow_connect/db_setup.sql
+    sqlserver_gateway:
+      name: smart_claims_sqlserver_gateway
+      gateway_definition:
+        connection_name: ${var.sqlserver_connection_name}
+        gateway_storage_catalog: ${var.catalog}
+        gateway_storage_schema: ${var.gateway_storage_schema}
+        gateway_storage_name: sqlserver_gateway
+
+    sqlserver_ingestion:
+      name: smart_claims_sqlserver_ingestion
+      catalog: ${var.catalog}
+      schema: 01_bronze
+      serverless: true
+      ingestion_definition:
+        ingestion_gateway_id: ${resources.pipelines.sqlserver_gateway.id}
+        objects:
+          - table:
+              source_catalog: claims_dev
+              source_schema: demo
+              source_table: policy
+              destination_catalog: ${var.catalog}
+              destination_schema: 01_bronze
+          - table:
+              source_catalog: claims_dev
+              source_schema: demo
+              source_table: claim
+              destination_catalog: ${var.catalog}
+              destination_schema: 01_bronze
+          - table:
+              source_catalog: claims_dev
+              source_schema: demo
+              source_table: customer
+              destination_catalog: ${var.catalog}
+              destination_schema: 01_bronze
+
+    # ---- INGESTION: message streaming (Azure Event Hubs, Kafka endpoint) -> Lakeflow Declarative Pipelines ----
+    streaming_ingestion:
+      name: smart_claims_streaming_ingestion
+      catalog: ${var.catalog}
+      schema: 01_bronze
+      serverless: true
+      continuous: false
+      libraries:
+        - notebook:
+            path: ../src/ingestion/streaming/eventhubs_parsed.py
+
+    # ---- INGESTION: object store -> Auto Loader (declarative tables) ----
+    # autoloader_cleansource.py is a plain Structured Streaming notebook and runs as a job task instead.
+    autoloader_ingestion:
+      name: smart_claims_autoloader_ingestion
+      catalog: ${var.catalog}
+      schema: 01_bronze
+      serverless: true
+      continuous: false
+      libraries:
+        - notebook:
+            path: ../src/ingestion/autoloader/ingest_training_imgs.py
+        - notebook:
+            path: ../src/ingestion/autoloader/metadata_imgs_schema.py
+
+    # ---- PROCESSING: bronze -> silver ----
+    silver_pipeline:
+      name: smart_claims_silver
+      catalog: ${var.catalog}
+      schema: 02_silver
+      serverless: true
+      continuous: false
+      libraries:
+        - notebook:
+            path: ../src/processing/silver/01_bronze_to_silver.py
+
+    # ---- PROCESSING: silver -> gold ----
+    gold_pipeline:
+      name: smart_claims_gold
+      catalog: ${var.catalog}
+      schema: 03_gold
+      serverless: true
+      continuous: false
+      environment:
+        dependencies:
+          - geopy
+      libraries:
+        - notebook:
+            path: ../src/processing/gold/02_silver_to_gold.py
