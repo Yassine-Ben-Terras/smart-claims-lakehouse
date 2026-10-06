@@ -1,0 +1,44 @@
+# Databricks Asset Bundle for the Smart Claims medallion project (Azure Databricks + ADLS Gen2).
+# Authenticate with Entra ID:  databricks auth login --host <workspace-host>
+# Validate:  databricks bundle validate -t dev
+# Deploy:    databricks bundle deploy   -t dev
+# Run:       databricks bundle run medallion_job -t dev
+bundle:
+  name: smart_claims_lakehouse
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog. NOTE - the notebooks currently hardcode "smart_claims_dev", so keep these in sync.
+    default: smart_claims_dev
+  # Storage: ADLS Gen2 is reached through Unity Catalog external locations / external volumes
+  # (see docs/azure_setup.md). The notebooks only use /Volumes/... paths, so no abfss:// paths appear in code.
+  sqlserver_connection_name:
+    description: Unity Catalog connection to the source SQL Server (Lakeflow Connect).
+    default: <sqlserver-connection-name>
+  gateway_storage_schema:
+    description: Schema where the Lakeflow Connect gateway stores staging data.
+    default: <gateway-storage-schema>
+  warehouse_id:
+    description: SQL warehouse used by the AI/BI dashboard.
+    default: <sql-warehouse-id>
+  notification_email:
+    description: Address for job failure notifications.
+    default: <notification-email>
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: <workspace-host>   # e.g. https://adb-1234567890123456.7.azuredatabricks.net (Azure Databricks)
+
+  prod:
+    mode: production
+    workspace:
+      host: <workspace-host>
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: <entra-service-principal-application-id>
