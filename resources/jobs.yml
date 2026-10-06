@@ -1,0 +1,75 @@
+# Jobs / workflows.
+# medallion_job : ingestion -> bronze -> silver -> gold
+#   Bronze tables are produced by the four ingestion tasks, so there is no separate bronze task.
+# ml_scoring_job : ML training/scoring + rule engine; run it after medallion_job.
+#   It is separate because the notebooks train a model (20 epochs) and rebuild gold insight tables.
+resources:
+  jobs:
+
+    medallion_job:
+      name: smart_claims_medallion_job
+      email_notifications:
+        on_failure:
+          - ${var.notification_email}
+      # schedule:                       # uncomment and adjust when ready
+      #   quartz_cron_expression: "0 0 6 * * ?"
+      #   timezone_id: UTC
+      #   pause_status: PAUSED
+      tasks:
+        # ---- INGESTION (parallel) ----
+        - task_key: ingest_sqlserver
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.sqlserver_ingestion.id}
+            full_refresh: false
+
+        - task_key: ingest_streaming
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.streaming_ingestion.id}
+
+        - task_key: ingest_autoloader_tables
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.autoloader_ingestion.id}
+
+        - task_key: ingest_autoloader_claim_images
+          notebook_task:
+            notebook_path: ../src/ingestion/autoloader/autoloader_cleansource.py
+
+        # ---- SILVER ----
+        - task_key: silver
+          depends_on:
+            - task_key: ingest_sqlserver
+            - task_key: ingest_streaming
+            - task_key: ingest_autoloader_tables
+            - task_key: ingest_autoloader_claim_images
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.silver_pipeline.id}
+
+        # ---- GOLD ----
+        - task_key: gold
+          depends_on:
+            - task_key: silver
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.gold_pipeline.id}
+
+    ml_scoring_job:
+      name: smart_claims_ml_scoring_job
+      email_notifications:
+        on_failure:
+          - ${var.notification_email}
+      tasks:
+        - task_key: ml_training_and_scoring
+          notebook_task:
+            notebook_path: ../src/ml/ML_Notebook.ipynb
+
+        - task_key: rule_engine
+          depends_on:
+            - task_key: ml_training_and_scoring
+          notebook_task:
+            notebook_path: ../src/ml/Rule_Engine.ipynb
+
+  # ---- CONSUMPTION: AI/BI dashboard ----
+  dashboards:
+    smart_claims_investigation:
+      display_name: FSI - Smart Claims Investigation
+      file_path: ../src/consumption/dashboards/smart_claims_investigation.lvdash.json
+      warehouse_id: ${var.warehouse_id}
